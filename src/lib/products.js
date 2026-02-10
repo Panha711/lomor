@@ -208,3 +208,25 @@ export function saveCustomProducts(items) {
     // ignore
   }
 }
+
+const TOTAL_SALES_KEY = "lomor-admin-total-sales";
+
+export function getTotalSales() {
+  if (typeof window === "undefined") return 0;
+  try {
+    const raw = localStorage.getItem(TOTAL_SALES_KEY);
+    return raw ? Number(JSON.parse(raw)) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function addToTotalSales(amount) {
+  if (typeof window === "undefined") return;
+  try {
+    const current = getTotalSales();
+    localStorage.setItem(TOTAL_SALES_KEY, JSON.stringify(current + Number(amount)));
+  } catch {
+    // ignore
+  }
+}

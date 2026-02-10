@@ -12,57 +12,30 @@ import {
   getCustomProducts,
   saveCustomProducts,
   slugify,
+  getTotalSales,
+  addToTotalSales,
 } from "@/lib/products";
 import {
-  PlusIcon,
-  SearchIcon,
-  PackageIcon,
-  ExclamationIcon,
-} from "@/components/icons";
+  parsePriceNum,
+  getEffectiveStock,
+  isOutOfStock,
+  getRowClassName,
+  getStockTextClassName,
+  SIZE_ORDER,
+} from "@/lib/adminUtils";
+import { PlusIcon, SearchIcon, PackageIcon } from "@/components/icons";
 import CreatePopUp from "@/components/CreatePopUp";
-import EditItem from "@/components/EditPopUp";
+import EditPopUp from "@/components/EditPopUp";
 import DeletePopUp from "@/components/DeletePopUp";
 
-const LOW_STOCK_THRESHOLD = 10;
-const SIZE_ORDER = ["XS", "S", "M", "L", "XL"];
 const INPUT_CLASS =
   "rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]";
 
-function parsePriceNum(str) {
-  if (str == null || str === "" || str === "—") return 0;
-  const num = String(str).replace(/[^0-9.]/g, "");
-  return Number(num) || 0;
-}
+const TABLE_COL_SPAN = 8;
 
-function getEffectiveStock(product, overrides) {
-  if (overrides[product.slug] !== undefined) {
-    return overrides[product.slug];
-  }
-  return product.stock ?? 0;
-}
+const DEFAULT_SORT = { column: "effectiveStock", direction: "asc" };
 
-function isLowStock(qty) {
-  return qty < LOW_STOCK_THRESHOLD && qty >= 0;
-}
-
-function isOutOfStock(qty) {
-  return qty <= 0;
-}
-
-function getRowClassName(product) {
-  const stock = product.effectiveStock;
-  if (isOutOfStock(stock)) return "bg-red-500/5";
-  if (isLowStock(stock)) return "bg-[var(--accent)]/5";
-  return "";
-}
-
-function getStockTextClassName(stock) {
-  if (isOutOfStock(stock)) return "font-medium text-red-600 dark:text-red-400";
-  if (isLowStock(stock)) return "font-medium text-[var(--accent)]";
-  return "text-[var(--foreground)]";
-}
-
-const emptyForm = {
+const EMPTY_PRODUCT_FORM = {
   title: "",
   category: "",
   sizes: DEFAULT_SIZES,
@@ -91,27 +64,159 @@ function SortableTh({ column, label, sortColumn, sortDirection, onSort }) {
   );
 }
 
+function SummaryCard({
+  value,
+  label,
+  icon: Icon = PackageIcon,
+  variant = "default",
+}) {
+  const variantStyles = {
+    default: "bg-[var(--card-hover)] text-[var(--muted)]",
+    danger: "bg-red-500/10 text-red-600 dark:text-red-400",
+    success: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  };
+  const valueStyles = {
+    default: "text-[var(--foreground)]",
+    danger: "text-red-600 dark:text-red-400",
+    success: "text-emerald-600 dark:text-emerald-400",
+  };
+  const style = variantStyles[variant] || variantStyles.default;
+  const valueStyle = valueStyles[variant] || valueStyles.default;
+
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+      <div className="flex items-center gap-3">
+        <div
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${style}`}
+        >
+          <Icon className="h-5 w-5" />
+        </div>
+        <div>
+          <p className={`text-2xl font-semibold ${valueStyle}`}>{value}</p>
+          <p className="text-sm text-[var(--muted)]">{label}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProductTableRow({
+  product,
+  sizeOptions,
+  isCustomProduct,
+  onEdit,
+  onDelete,
+  onSellOne,
+}) {
+  const stock = product.effectiveStock;
+
+  return (
+    <tr
+      className={`border-b border-[var(--border)] last:border-b-0 transition-colors hover:bg-[var(--card-hover)] ${getRowClassName(product)}`}
+    >
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-3">
+          {product.imageSrc ? (
+            <img
+              src={product.imageSrc}
+              alt={product.title}
+              className="h-10 w-10 shrink-0 rounded-lg object-cover"
+            />
+          ) : (
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[var(--card-hover)] text-sm text-[var(--muted)]/40">
+              ✦
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium text-[var(--foreground)]">
+              {product.title}
+            </span>
+            {isCustomProduct && (
+              <span className="rounded bg-[var(--accent)]/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--accent)]">
+                Custom
+              </span>
+            )}
+          </div>
+        </div>
+      </td>
+      <td className="px-4 py-3 text-[var(--muted)]">{product.category}</td>
+      <td className="px-4 py-3">
+        <div className="flex flex-wrap gap-1">
+          {sizeOptions.length
+            ? sizeOptions.map((s) => {
+                const hasSize = productHasSize(product, s);
+                return (
+                  <span
+                    key={s}
+                    className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${
+                      hasSize
+                        ? "border border-[var(--accent)]/30 bg-[var(--accent)]/15 text-[var(--accent)]"
+                        : "border border-[var(--border)] bg-[var(--card-hover)]/50 text-[var(--muted)]"
+                    }`}
+                    title={hasSize ? `Has size ${s}` : `No size ${s}`}
+                  >
+                    {s}
+                  </span>
+                );
+              })
+            : "—"}
+        </div>
+      </td>
+      <td className="px-4 py-3 font-medium text-[var(--foreground)]">
+        {product.priceStore ? `$${product.priceStore}` : "—"}
+      </td>
+      <td className="px-4 py-3 font-medium text-[var(--foreground)]">
+        {product.price ? `$${product.price}` : "—"}
+      </td>
+      <td className="px-4 py-3 text-center">
+        <span className={getStockTextClassName(stock)}>{stock}</span>
+      </td>
+      <td className="flex justify-end gap-3 px-4 py-5">
+        <button
+          type="button"
+          onClick={() => onEdit(product)}
+          className="font-medium text-[var(--accent)] hover:text-[var(--accent-hover)]"
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          onClick={() => onDelete(product)}
+          className="font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+        >
+          Delete
+        </button>
+      </td>
+    </tr>
+  );
+}
+
 export default function AdminPage() {
   const [stockOverrides, setStockOverrides] = useState({});
   const [customProducts, setCustomProducts] = useState([]);
+  const [totalSales, setTotalSales] = useState(0);
+  const [hydrated, setHydrated] = useState(false);
+
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [sizeFilter, setSizeFilter] = useState("");
-  const [sortColumn, setSortColumn] = useState("effectiveStock");
-  const [sortDirection, setSortDirection] = useState("asc");
-  const [hydrated, setHydrated] = useState(false);
+  const [sortColumn, setSortColumn] = useState(DEFAULT_SORT.column);
+  const [sortDirection, setSortDirection] = useState(DEFAULT_SORT.direction);
+
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createForm, setCreateForm] = useState(emptyForm);
+  const [createForm, setCreateForm] = useState(EMPTY_PRODUCT_FORM);
   const [createError, setCreateError] = useState("");
+
   const [editingProduct, setEditingProduct] = useState(null);
-  const [editForm, setEditForm] = useState(emptyForm);
+  const [editForm, setEditForm] = useState(EMPTY_PRODUCT_FORM);
   const [editError, setEditError] = useState("");
+
   const [productToDelete, setProductToDelete] = useState(null);
 
   useEffect(() => {
-    const stored = getAllStockFromStorage();
-    setStockOverrides(stored);
+    setStockOverrides(getAllStockFromStorage());
     setCustomProducts(getCustomProducts());
+    setTotalSales(getTotalSales());
     setHydrated(true);
   }, []);
 
@@ -146,12 +251,15 @@ export default function AdminPage() {
     if (!hydrated) {
       return {
         filteredProducts: [],
-        stats: { total: 0, lowStock: 0, outOfStock: 0 },
+        stats: { total: 0, outOfStock: 0 },
       };
     }
+
     const q = search.trim().toLowerCase();
     const cat = categoryFilter.trim();
     const size = sizeFilter.trim();
+    const dir = sortDirection === "asc" ? 1 : -1;
+
     let list = allProducts.map((p) => ({
       ...p,
       effectiveStock: getEffectiveStock(p, stockOverrides),
@@ -167,36 +275,25 @@ export default function AdminPage() {
           p.category.toLowerCase().includes(q),
       );
     }
-    if (cat) {
-      list = list.filter((p) => p.category === cat);
-    }
-    if (size) {
-      list = list.filter((p) => productHasSize(p, size));
-    }
+    if (cat) list = list.filter((p) => p.category === cat);
+    if (size) list = list.filter((p) => productHasSize(p, size));
 
     list = [...list].sort((a, b) => {
-      const dir = sortDirection === "asc" ? 1 : -1;
-      if (sortColumn === "title") {
-        return dir * a.title.localeCompare(b.title);
-      }
-      if (sortColumn === "category") {
+      if (sortColumn === "title") return dir * a.title.localeCompare(b.title);
+      if (sortColumn === "category")
         return (
           dir *
           (a.category.localeCompare(b.category) ||
             a.title.localeCompare(b.title))
         );
-      }
-      if (sortColumn === "priceStore") {
+      if (sortColumn === "priceStore")
         return (
           dir * (parsePriceNum(a.priceStore) - parsePriceNum(b.priceStore))
         );
-      }
-      if (sortColumn === "price") {
+      if (sortColumn === "price")
         return dir * (parsePriceNum(a.price) - parsePriceNum(b.price));
-      }
-      if (sortColumn === "effectiveStock") {
+      if (sortColumn === "effectiveStock")
         return dir * (a.effectiveStock - b.effectiveStock);
-      }
       return 0;
     });
 
@@ -204,20 +301,13 @@ export default function AdminPage() {
       ...p,
       effectiveStock: getEffectiveStock(p, stockOverrides),
     }));
-    const lowStock = allWithStock.filter((p) =>
-      isLowStock(p.effectiveStock),
-    ).length;
     const outOfStock = allWithStock.filter((p) =>
       isOutOfStock(p.effectiveStock),
     ).length;
 
     return {
       filteredProducts: list,
-      stats: {
-        total: allProducts.length,
-        lowStock,
-        outOfStock,
-      },
+      stats: { total: allProducts.length, outOfStock },
     };
   }, [
     hydrated,
@@ -230,10 +320,9 @@ export default function AdminPage() {
     allProducts,
   ]);
 
-  console.log(filteredProducts);
-
+  // —— Handlers: Create ——
   const openCreateModal = () => {
-    setCreateForm(emptyForm);
+    setCreateForm(EMPTY_PRODUCT_FORM);
     setCreateError("");
     setShowCreateModal(true);
   };
@@ -243,22 +332,11 @@ export default function AdminPage() {
     setCreateError("");
   };
 
-  const handleSortHeader = (column) => {
-    if (sortColumn === column) {
-      setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortColumn(column);
-      setSortDirection("asc");
-    }
-  };
-
   const handleCreateSubmit = (e) => {
     e.preventDefault();
     setCreateError("");
     const title = createForm.title.trim();
     const category = createForm.category.trim();
-    const priceStore = createForm.priceStore.trim();
-    const priceCustomer = createForm.priceCustomer.trim();
     if (!title) {
       setCreateError("Title is required.");
       return;
@@ -282,8 +360,8 @@ export default function AdminPage() {
       category,
       sizes: createForm.sizes.trim() || DEFAULT_SIZES,
       sku: `CUS-${Date.now().toString(36).toUpperCase()}`,
-      priceStore: priceStore || "—",
-      price: priceCustomer || "¥0",
+      priceStore: createForm.priceStore.trim() || "—",
+      price: createForm.priceCustomer.trim() || "¥0",
       stock,
       description: createForm.description.trim() || "",
       imageSrc: createForm.imageSrc?.trim() || undefined,
@@ -297,21 +375,7 @@ export default function AdminPage() {
   };
 
   const openEditModal = (product) => {
-    const stock = getEffectiveStock(product, stockOverrides);
-    setEditForm({
-      title: product.title ?? "",
-      category: product.category ?? "",
-      priceStore:
-        product.priceStore && product.priceStore !== "—"
-          ? product.priceStore
-          : "",
-      priceCustomer:
-        product.price && product.price !== "—" ? product.price : "",
-      sizes: product.sizes ?? DEFAULT_SIZES,
-      stock: typeof stock === "number" ? stock : 0,
-      description: product.description ?? "",
-      imageSrc: product.imageSrc ?? "",
-    });
+    setEditForm(product);
     setEditError("");
     setEditingProduct(product);
   };
@@ -319,27 +383,6 @@ export default function AdminPage() {
   const closeEditModal = () => {
     setEditingProduct(null);
     setEditError("");
-  };
-
-  const confirmDelete = () => {
-    if (!productToDelete) return;
-    const isCustom = customProducts.some(
-      (p) => p.slug === productToDelete.slug,
-    );
-    if (isCustom) {
-      const nextCustom = customProducts.filter(
-        (p) => p.slug !== productToDelete.slug,
-      );
-      setCustomProducts(nextCustom);
-      saveCustomProducts(nextCustom);
-    }
-    setStockOverrides((prev) => {
-      const next = { ...prev };
-      delete next[productToDelete.slug];
-      return next;
-    });
-    setStockInStorage(productToDelete.slug, 0);
-    setProductToDelete(null);
   };
 
   const handleEditSubmit = (e) => {
@@ -383,89 +426,87 @@ export default function AdminPage() {
     closeEditModal();
   };
 
+  const confirmDelete = () => {
+    if (!productToDelete) return;
+    const isCustom = customProducts.some(
+      (p) => p.slug === productToDelete.slug,
+    );
+    if (isCustom) {
+      const nextCustom = customProducts.filter(
+        (p) => p.slug !== productToDelete.slug,
+      );
+      setCustomProducts(nextCustom);
+      saveCustomProducts(nextCustom);
+    }
+    setStockOverrides((prev) => {
+      const next = { ...prev };
+      delete next[productToDelete.slug];
+      return next;
+    });
+    setStockInStorage(productToDelete.slug, 0);
+    setProductToDelete(null);
+  };
+
+  const handleSellOne = (product) => {
+    const currentStock = getEffectiveStock(product, stockOverrides);
+    if (currentStock <= 0) return;
+    const priceNum = parsePriceNum(product.price);
+    const newStock = currentStock - 1;
+    setStockInStorage(product.slug, newStock);
+    setStockOverrides((prev) => ({ ...prev, [product.slug]: newStock }));
+    addToTotalSales(priceNum);
+    setTotalSales(getTotalSales());
+  };
+
+  const handleSortHeader = (column) => {
+    if (sortColumn === column) {
+      setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortColumn(column);
+      setSortDirection("asc");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] antialiased">
       <Header />
 
       <main className="mx-auto max-w-[1200px] px-6 py-8 md:py-10">
-        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-xl font-semibold tracking-tight text-[var(--foreground)]">
             Inventory
           </h1>
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={openCreateModal}
-              className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--accent-hover)]"
-            >
-              <PlusIcon className="h-4 w-4" />
-              Create new item
-            </button>
-          </div>
-        </div>
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--accent-hover)]"
+          >
+            <PlusIcon className="h-4 w-4" />
+            Create new item
+          </button>
+        </header>
 
-        {/* Summary cards */}
-        <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-4">
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--card-hover)] text-[var(--muted)]">
-                <PackageIcon className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-2xl font-semibold text-[var(--foreground)]">
-                  {stats.total}
-                </p>
-                <p className="text-sm text-[var(--muted)]">Total items</p>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--accent)]/10 text-[var(--accent)]">
-                <ExclamationIcon className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-2xl font-semibold text-[var(--accent)]">
-                  {stats.lowStock}
-                </p>
-                <p className="text-sm text-[var(--muted)]">
-                  Low stock (&lt;{LOW_STOCK_THRESHOLD})
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--card-hover)] text-[var(--muted)]">
-                <PackageIcon className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-2xl font-semibold text-[var(--foreground)]">
-                  {stats.total - stats.outOfStock}
-                </p>
-                <p className="text-sm text-[var(--muted)]">In stock</p>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-500/10 text-red-600 dark:text-red-400">
-                <PackageIcon className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-2xl font-semibold text-red-600 dark:text-red-400">
-                  {stats.outOfStock}
-                </p>
-                <p className="text-sm text-[var(--muted)]">Out of stock</p>
-              </div>
-            </div>
-          </div>
-        </div>
+        <section className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-4">
+          <SummaryCard value={stats.total} label="Total items" />
+          <SummaryCard
+            value={stats.total - stats.outOfStock}
+            label="In stock"
+          />
+          <SummaryCard
+            value={stats.outOfStock}
+            label="Out of stock"
+            variant="danger"
+          />
+          <SummaryCard
+            value={`¥${totalSales.toLocaleString()}`}
+            label="Total money from sold clothes"
+            variant="success"
+          />
+        </section>
 
-        {/* Filters & sort */}
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-1 flex-wrap items-center gap-3">
-            <div className="relative flex-1 min-w-[180px] max-w-xs">
+        <section className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+            <div className="relative min-w-[180px] max-w-xs flex-1">
               <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
               <input
                 type="search"
@@ -493,7 +534,7 @@ export default function AdminPage() {
               value={sizeFilter}
               onChange={(e) => setSizeFilter(e.target.value)}
               className={INPUT_CLASS}
-              aria-label="Filter by size (has size)"
+              aria-label="Filter by size"
               title="Show only products that have this size"
             >
               <option value="">All sizes</option>
@@ -507,25 +548,23 @@ export default function AdminPage() {
           <p className="text-sm text-[var(--muted)]">
             Click a column header to sort.
           </p>
-        </div>
+        </section>
 
-        {/* Size legend */}
         <div className="mb-2 flex flex-wrap items-center gap-4 text-xs text-[var(--muted)]">
           <span className="flex items-center gap-1.5">
-            <span className="inline-flex rounded bg-[var(--accent)]/15 px-1.5 py-0.5 text-[var(--accent)] border border-[var(--accent)]/30 font-medium">
+            <span className="inline-flex rounded border border-[var(--accent)]/30 bg-[var(--accent)]/15 px-1.5 py-0.5 font-medium text-[var(--accent)]">
               M
             </span>
             = has size
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="inline-flex rounded bg-[var(--card-hover)]/50 px-1.5 py-0.5 text-[var(--muted)] border border-[var(--border)] font-medium">
+            <span className="inline-flex rounded border border-[var(--border)] bg-[var(--card-hover)]/50 px-1.5 py-0.5 font-medium text-[var(--muted)]">
               M
             </span>
             = no size
           </span>
         </div>
 
-        {/* Table */}
         <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-left text-sm">
@@ -545,7 +584,7 @@ export default function AdminPage() {
                     sortDirection={sortDirection}
                     onSort={handleSortHeader}
                   />
-                  <th className="px-4 py-3 font-semibold text-center text-[var(--muted)] whitespace-nowrap">
+                  <th className="whitespace-nowrap px-4 py-3 text-center text-[var(--muted)]">
                     Size
                   </th>
                   <SortableTh
@@ -569,7 +608,7 @@ export default function AdminPage() {
                     sortDirection={sortDirection}
                     onSort={handleSortHeader}
                   />
-                  <th className="px-4 py-3 font-semibold text-center text-[var(--muted)] w-[140px]">
+                  <th className="w-[140px] px-4 py-3 text-center font-semibold text-[var(--muted)]">
                     Action
                   </th>
                   <th className="px-4 py-3 font-semibold text-[var(--muted)]" />
@@ -579,7 +618,7 @@ export default function AdminPage() {
                 {!hydrated ? (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={TABLE_COL_SPAN}
                       className="px-4 py-8 text-center text-[var(--muted)]"
                     >
                       Loading…
@@ -588,106 +627,26 @@ export default function AdminPage() {
                 ) : filteredProducts.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={TABLE_COL_SPAN}
                       className="px-4 py-8 text-center text-[var(--muted)]"
                     >
                       No products match your filters.
                     </td>
                   </tr>
                 ) : (
-                  filteredProducts.map((product) => {
-                    const stock = product.effectiveStock;
-                    return (
-                      <tr
-                        key={product.slug}
-                        className={`border-b border-[var(--border)] last:border-b-0 transition-colors hover:bg-[var(--card-hover)] ${getRowClassName(product)}`}
-                      >
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            {product.imageSrc ? (
-                              <img
-                                src={product.imageSrc}
-                                alt={product.title}
-                                className="h-10 w-10 shrink-0 object-cover rounded-lg"
-                              />
-                            ) : (
-                              <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[var(--card-hover)] text-[var(--muted)]/40 text-sm">
-                                ✦
-                              </div>
-                            )}
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-medium text-[var(--foreground)]">
-                                {product.title}
-                              </span>
-                              {customProducts.some(
-                                (p) => p.slug === product.slug,
-                              ) && (
-                                <span className="rounded bg-[var(--accent)]/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--accent)]">
-                                  Custom
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-[var(--muted)]">
-                          {product.category}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap gap-1">
-                            {sizeOptions.length
-                              ? sizeOptions.map((s) => {
-                                  const hasSize = productHasSize(product, s);
-                                  return (
-                                    <span
-                                      key={s}
-                                      className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${
-                                        hasSize
-                                          ? "bg-[var(--accent)]/15 text-[var(--accent)] border border-[var(--accent)]/30"
-                                          : "bg-[var(--card-hover)]/50 text-[var(--muted)] border border-[var(--border)]"
-                                      }`}
-                                      title={
-                                        hasSize
-                                          ? `Has size ${s}`
-                                          : `No size ${s}`
-                                      }
-                                    >
-                                      {s}
-                                    </span>
-                                  );
-                                })
-                              : "—"}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 font-medium text-[var(--foreground)]">
-                          {product.priceStore ? "$" + product.priceStore : "—"}
-                        </td>
-                        <td className="px-4 py-3 font-medium text-[var(--foreground)]">
-                          {product.price ? "$" + product.price : "—"}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <span className={getStockTextClassName(stock)}>
-                            {stock}
-                          </span>
-                        </td>
-                        <td className="px-4 py-5 text-center flex gap-5 justify-end">
-                          <button
-                            type="button"
-                            onClick={() => openEditModal(product)}
-                            className="inline-flex items-center gap-1 font-medium text-[var(--accent)] hover:text-[var(--accent-hover)] cursor-pointer"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setProductToDelete(product)}
-                            className="inline-flex items-center gap-1 font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 cursor-pointer"
-                          >
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
+                  filteredProducts.map((product) => (
+                    <ProductTableRow
+                      key={product.slug}
+                      product={product}
+                      sizeOptions={sizeOptions}
+                      isCustomProduct={customProducts.some(
+                        (p) => p.slug === product.slug,
+                      )}
+                      onEdit={openEditModal}
+                      onDelete={setProductToDelete}
+                      onSellOne={handleSellOne}
+                    />
+                  ))
                 )}
               </tbody>
             </table>
@@ -695,11 +654,9 @@ export default function AdminPage() {
         </div>
 
         <p className="mt-4 text-xs text-[var(--muted)]">
-          Stock changes are saved in this browser. Low stock = under{" "}
-          {LOW_STOCK_THRESHOLD} units.
+          Stock and total sales are saved in this browser.
         </p>
 
-        {/* Create new item modal */}
         {showCreateModal && (
           <CreatePopUp
             showCreateModal={showCreateModal}
@@ -711,7 +668,6 @@ export default function AdminPage() {
           />
         )}
 
-        {/* Delete confirmation popup */}
         {productToDelete && (
           <DeletePopUp
             productToDelete={productToDelete}
@@ -720,9 +676,8 @@ export default function AdminPage() {
           />
         )}
 
-        {/* Edit item modal */}
         {editingProduct && (
-          <EditItem
+          <EditPopUp
             editingProduct={editingProduct}
             closeEditModal={closeEditModal}
             customProducts={customProducts}
