@@ -39,6 +39,19 @@ export default async function ProductPage({ params }) {
 
         <article className="grid gap-8 md:grid-cols-2 md:gap-12">
           <div className="w-full max-w-[380px] max-h-[420px] aspect-[3/4] overflow-hidden rounded-xl bg-[var(--card-hover)]">
+            {product.imageSrc ? (
+              <img
+                src={product.imageSrc}
+                alt={product.title}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-[var(--muted)]/30">
+                <span className="text-6xl" aria-hidden>
+                  ✦
+                </span>
+              </div>
+            )}
             <div className="flex h-full w-full items-center justify-center text-[var(--muted)]/30">
               <span className="text-6xl" aria-hidden>
                 ✦
@@ -76,8 +89,6 @@ export default async function ProductPage({ params }) {
           </div>
         </article>
       </main>
-
-      <Footer />
     </div>
   );
 }

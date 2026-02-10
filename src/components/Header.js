@@ -49,7 +49,6 @@ export default function Header() {
         </nav>
 
         <div className="flex flex-1 items-center justify-end gap-2 sm:max-w-md sm:flex-initial sm:gap-1">
-          <SearchBar />
           <div className="flex items-center gap-0.1">
             <button
               type="button"
