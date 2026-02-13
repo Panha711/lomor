@@ -27,7 +27,7 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
+  Tooltip as RechartsTooltip,
   Legend,
   ResponsiveContainer,
   PieChart,
@@ -35,6 +35,7 @@ import {
   Cell,
 } from "recharts";
 import { getClothes, computeStats } from "@/lib/clothes-api";
+import { getSales } from "@/lib/sales-api";
 import type { ClothingItem } from "@/types/clothes";
 import type { DashboardStats } from "@/lib/clothes-api";
 
@@ -99,6 +100,7 @@ const fmtK = (v: number) => {
 export default function DashboardPage() {
   const [items, setItems] = useState<ClothingItem[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [totalSalesRevenue, setTotalSalesRevenue] = useState(0);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
@@ -107,6 +109,7 @@ export default function DashboardPage() {
       setItems(d);
       setStats(computeStats(d));
     });
+    setTotalSalesRevenue(getSales().reduce((sum, s) => sum + s.total, 0));
   }, []);
 
   /* ---- derived data for charts ---- */
@@ -168,6 +171,13 @@ export default function DashboardPage() {
       iconColor: "#1e88e5",
     },
     {
+      label: "Total Sales",
+      value: fmt(totalSalesRevenue),
+      icon: <TrendingUpIcon sx={{ fontSize: 18 }} />,
+      iconBg: "#e8f5e9",
+      iconColor: "#2e7d32",
+    },
+    {
       label: "In Stock",
       value: stats?.inStock ?? 0,
       icon: <CheckCircleIcon sx={{ fontSize: 18 }} />,
@@ -180,13 +190,6 @@ export default function DashboardPage() {
       icon: <CancelIcon sx={{ fontSize: 18 }} />,
       iconBg: "#fce4ec",
       iconColor: "#e53935",
-    },
-    {
-      label: "Low Stock",
-      value: stats?.lowStock ?? 0,
-      icon: <WarningAmberIcon sx={{ fontSize: 18 }} />,
-      iconBg: "#fff8e1",
-      iconColor: "#f9a825",
     },
   ];
 
@@ -309,13 +312,13 @@ export default function DashboardPage() {
                 tickLine={false}
                 width={50}
               />
-              <Tooltip
+              <RechartsTooltip
                 contentStyle={{
                   borderRadius: 8,
                   border: "1px solid #eee",
                   fontSize: 13,
                 }}
-                formatter={(value, name) => {
+                formatter={(value: unknown, name?: string) => {
                   const v = Number(value);
                   return name === "value" ? [fmt(v), "Value"] : [v, "Quantity"];
                 }}
@@ -384,13 +387,13 @@ export default function DashboardPage() {
                           />
                         ))}
                       </Pie>
-                      <Tooltip
+                      <RechartsTooltip
                         contentStyle={{
                           borderRadius: 8,
                           border: "1px solid #eee",
                           fontSize: 13,
                         }}
-                        formatter={(value, name) => [
+                        formatter={(value: unknown, name: unknown) => [
                           Number(value),
                           String(name),
                         ]}
