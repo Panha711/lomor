@@ -263,7 +263,10 @@ export default function DashboardPage() {
       </Grid>
 
       {/* ─── Bar Chart: Inventory by Type ─── */}
-      <Card variant="outlined" sx={{ mb: 3, p: { xs: 2, md: 3 } }}>
+      <Card
+        variant="outlined"
+        sx={{ mb: 3, p: { xs: 2, md: 3 }, border: "none !important" }}
+      >
         <Box
           sx={{
             display: "flex",
@@ -283,8 +286,14 @@ export default function DashboardPage() {
         {barData.length === 0 ? (
           <EmptyState text="Add items to see the chart" />
         ) : (
-          <ResponsiveContainer width="100%" height={isMobile ? 260 : 340}>
-            <BarChart data={barData} barGap={2} barCategoryGap="20%">
+          <Box
+            sx={{
+              "& .recharts-wrapper": { border: "none", outline: "none" },
+              "& .recharts-surface": { border: "none", outline: "none" },
+            }}
+          >
+            <ResponsiveContainer width="100%" height={isMobile ? 260 : 340}>
+            <BarChart data={barData} barGap={2} barCategoryGap="20%" margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
               <CartesianGrid
                 strokeDasharray="3 3"
                 vertical={false}
@@ -315,7 +324,8 @@ export default function DashboardPage() {
               <RechartsTooltip
                 contentStyle={{
                   borderRadius: 8,
-                  border: "1px solid #eee",
+                  border: "none",
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
                   fontSize: 13,
                 }}
                 formatter={(value: unknown, name?: string) => {
@@ -339,6 +349,7 @@ export default function DashboardPage() {
               />
             </BarChart>
           </ResponsiveContainer>
+          </Box>
         )}
       </Card>
 
