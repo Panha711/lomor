@@ -32,6 +32,7 @@ const EMPTY_FORM: ClothingFormData = {
   size: "",
   color: "",
   price: 0,
+  price_old: 0,
   quantity: 0,
   image_url: "",
 };
@@ -60,6 +61,7 @@ export default function ClothesForm({
     if (!form.size) return setError("Size is required.");
     if (!form.color) return setError("Color is required.");
     if (form.price < 0) return setError("Price must be 0 or more.");
+    if ((form.price_old ?? 0) < 0) return setError("Price old must be 0 or more.");
     if (form.quantity < 0) return setError("Quantity must be 0 or more.");
 
     setSaving(true);
@@ -176,6 +178,21 @@ export default function ClothesForm({
                 ))}
               </Select>
             </FormControl>
+          </Grid>
+
+          {/* Price old */}
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField
+              label="Price old ($)"
+              type="number"
+              fullWidth
+              placeholder="Optional"
+              slotProps={{ htmlInput: { min: 0, step: 0.01 } }}
+              value={form.price_old != null && form.price_old > 0 ? form.price_old : ""}
+              onChange={(e) =>
+                update("price_old", parseFloat(e.target.value) || 0)
+              }
+            />
           </Grid>
 
           {/* Price */}

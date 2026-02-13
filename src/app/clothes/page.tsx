@@ -411,7 +411,9 @@ export default function ClothesListPage() {
                           color="text.secondary"
                           sx={{ fontSize: 12, mt: 0.75 }}
                         >
-                          {fmt(item.price)} · Qty {item.quantity}
+                          {item.price_old != null && item.price_old > 0
+                            ? `${fmt(item.price_old)} → ${fmt(item.price)} · Qty ${item.quantity}`
+                            : `${fmt(item.price)} · Qty ${item.quantity}`}
                         </Typography>
                       </Box>
                     </Box>
@@ -515,6 +517,9 @@ export default function ClothesListPage() {
                 <TableCell sx={{ width: 72 }}>Size</TableCell>
                 <TableCell sx={{ width: 70 }}>Color</TableCell>
                 <TableCell sx={{ width: 80, textAlign: "right" }}>
+                  Price old
+                </TableCell>
+                <TableCell sx={{ width: 80, textAlign: "right" }}>
                   Price
                 </TableCell>
                 <TableCell sx={{ width: 56, textAlign: "right" }}>
@@ -604,6 +609,11 @@ export default function ClothesListPage() {
                       />
                       {item.color}
                     </Box>
+                  </TableCell>
+                  <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>
+                    {item.price_old != null && item.price_old > 0
+                      ? fmt(item.price_old)
+                      : "—"}
                   </TableCell>
                   <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>
                     {fmt(item.price)}
@@ -873,6 +883,26 @@ export default function ClothesListPage() {
                           </Typography>
                         </Box>
                       </Box>
+                      {detailItem.price_old != null && detailItem.price_old > 0 && (
+                        <Box
+                          sx={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            py: 1,
+                            px: 1.5,
+                            borderRadius: 1,
+                            bgcolor: "grey.50",
+                          }}
+                        >
+                          <Typography variant="body2" color="text.secondary">
+                            Price old
+                          </Typography>
+                          <Typography variant="body2" fontWeight={600}>
+                            {fmt(detailItem.price_old)}
+                          </Typography>
+                        </Box>
+                      )}
                       <Box
                         sx={{
                           display: "flex",
@@ -1012,12 +1042,13 @@ export default function ClothesListPage() {
           {editItem && (
             <ClothesForm
               key={editItem.id}
-              initialData={{
+                initialData={{
                 name: editItem.name,
                 type: editItem.type,
                 size: editItem.size,
                 color: editItem.color,
                 price: editItem.price,
+                price_old: editItem.price_old,
                 quantity: editItem.quantity,
                 image_url: editItem.image_url,
               }}

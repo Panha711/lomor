@@ -5,6 +5,8 @@ export interface ClothingItem {
     size: string;
     color: string;
     price: number;
+    /** Original/old price before discount (optional). */
+    price_old?: number;
     quantity: number;
     image_url: string | null;
     created_at: string;
@@ -17,6 +19,7 @@ export interface ClothingFormData {
     size: string;
     color: string;
     price: number;
+    price_old?: number;
     quantity: number;
     image_url?: string | null;
 }
