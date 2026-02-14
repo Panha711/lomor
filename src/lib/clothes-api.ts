@@ -1,9 +1,10 @@
 import type { ClothingItem, ClothingFormData } from "@/types/clothes";
+import { supabase } from "./supabase";
 
 const STORAGE_KEY = "lomor_clothes";
 
 /* ------------------------------------------------------------------ */
-/*  LocalStorage helpers                                               */
+/*  LocalStorage helpers (fallback when Supabase not configured)       */
 /* ------------------------------------------------------------------ */
 
 function readStore(): ClothingItem[] {
@@ -24,15 +25,41 @@ function generateId(): string {
     return crypto.randomUUID?.() ?? Math.random().toString(36).slice(2, 10);
 }
 
+function rowToItem(row: Record<string, unknown>): ClothingItem {
+    return {
+        id: String(row.id),
+        name: String(row.name),
+        type: String(row.type),
+        size: String(row.size),
+        color: String(row.color),
+        price: Number(row.price),
+        price_old: row.price_old != null ? Number(row.price_old) : undefined,
+        quantity: Number(row.quantity),
+        image_url: row.image_url != null ? String(row.image_url) : null,
+        created_at: String(row.created_at),
+        updated_at: String(row.updated_at),
+    };
+}
+
 /* ------------------------------------------------------------------ */
 /*  CRUD                                                               */
 /* ------------------------------------------------------------------ */
 
 export async function getClothes(): Promise<ClothingItem[]> {
+    if (supabase) {
+        const { data, error } = await supabase.from("clothes").select("*").order("created_at", { ascending: false });
+        if (error) return [];
+        return (data ?? []).map(rowToItem);
+    }
     return readStore();
 }
 
 export async function getClothingById(id: string): Promise<ClothingItem | null> {
+    if (supabase) {
+        const { data, error } = await supabase.from("clothes").select("*").eq("id", id).single();
+        if (error || !data) return null;
+        return rowToItem(data);
+    }
     return readStore().find((i) => i.id === id) ?? null;
 }
 
@@ -45,6 +72,23 @@ export async function createClothing(item: ClothingFormData): Promise<ClothingIt
         created_at: now,
         updated_at: now,
     };
+    if (supabase) {
+        const { error } = await supabase.from("clothes").insert({
+            id: newItem.id,
+            name: newItem.name,
+            type: newItem.type,
+            size: newItem.size,
+            color: newItem.color,
+            price: newItem.price,
+            price_old: newItem.price_old ?? null,
+            quantity: newItem.quantity,
+            image_url: newItem.image_url,
+            created_at: newItem.created_at,
+            updated_at: newItem.updated_at,
+        });
+        if (error) throw new Error(error.message);
+        return newItem;
+    }
     const items = readStore();
     items.unshift(newItem);
     writeStore(items);
@@ -52,6 +96,27 @@ export async function createClothing(item: ClothingFormData): Promise<ClothingIt
 }
 
 export async function updateClothing(id: string, updates: Partial<ClothingFormData>): Promise<ClothingItem> {
+    if (supabase) {
+        const current = await getClothingById(id);
+        if (!current) throw new Error("Item not found");
+        const updated = { ...current, ...updates, updated_at: new Date().toISOString() };
+        const { error } = await supabase
+            .from("clothes")
+            .update({
+                name: updated.name,
+                type: updated.type,
+                size: updated.size,
+                color: updated.color,
+                price: updated.price,
+                price_old: updated.price_old ?? null,
+                quantity: updated.quantity,
+                image_url: updated.image_url,
+                updated_at: updated.updated_at,
+            })
+            .eq("id", id);
+        if (error) throw new Error(error.message);
+        return updated;
+    }
     const items = readStore();
     const idx = items.findIndex((i) => i.id === id);
     if (idx === -1) throw new Error("Item not found");
@@ -61,6 +126,11 @@ export async function updateClothing(id: string, updates: Partial<ClothingFormDa
 }
 
 export async function deleteClothing(id: string): Promise<void> {
+    if (supabase) {
+        const { error } = await supabase.from("clothes").delete().eq("id", id);
+        if (error) throw new Error(error.message);
+        return;
+    }
     const items = readStore().filter((i) => i.id !== id);
     writeStore(items);
 }
@@ -70,8 +140,9 @@ export async function deleteClothing(id: string): Promise<void> {
 /* ------------------------------------------------------------------ */
 
 export async function searchClothes(query: string): Promise<ClothingItem[]> {
+    const items = await getClothes();
     const q = query.toLowerCase();
-    return readStore().filter(
+    return items.filter(
         (i) =>
             i.name.toLowerCase().includes(q) ||
             i.type.toLowerCase().includes(q) ||

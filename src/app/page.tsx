@@ -109,7 +109,9 @@ export default function DashboardPage() {
       setItems(d);
       setStats(computeStats(d));
     });
-    setTotalSalesRevenue(getSales().reduce((sum, s) => sum + s.total, 0));
+    getSales().then((sales) =>
+      setTotalSalesRevenue(sales.reduce((sum, s) => sum + s.total, 0))
+    );
   }, []);
 
   /* ---- derived data for charts ---- */

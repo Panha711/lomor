@@ -76,7 +76,7 @@ export default function ReportsPage() {
   }, [filteredSales, page, rowsPerPage]);
 
   useEffect(() => {
-    setSales(getSales());
+    getSales().then(setSales);
   }, [receiptSale]);
 
   useEffect(() => {
